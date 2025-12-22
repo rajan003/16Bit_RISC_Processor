@@ -6,11 +6,10 @@ module Data_Mem(
 
           input logic mem_wr_en,
 
-  input logic [15:0] mem_wr_Addr,
+  input logic [15:0] mem_Addr,
   input logic [15:0] mem_wr_data,
 
   input logic mem_read_en,
-  input logic [15:0] mem_rd_Addr,
   output logic [15:0] mem_rd_data
 );
 
@@ -18,10 +17,10 @@ module Data_Mem(
   logic [15:0] mem [7:0] ;
 
   always@(posedge clk)
-    if(mem_wr_en) mem[mem_Wr_Addr[2:0]] <= mem_wr_data;
+    if(mem_wr_en) mem[mem_Addr[2:0]] <= mem_wr_data;
 
 
-  mem_rd_data = mem_rd_en ? mem[mem_rd_Addr[2:0]] : '0;
+  mem_rd_data = mem_rd_en ? mem[mem_Addr[2:0]] : '0;
 
 endmodule 
       
