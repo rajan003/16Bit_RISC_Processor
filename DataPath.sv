@@ -2,6 +2,38 @@
 ///Package Importt/
 import cpu_pkg::*;
 /// data Path Design for RISC Processor
+module DataPath (
+                input logic clk,
+
+                ///control signals from control unit ///
+                input logic Cu_isSt, /// Store instruction 
+                input logic Cu_isLd , // Load instruction 
+                input logic Cu_isBeq, // Branch Equivalent
+                input logic Cu_isBgt, /// branch Greater than
+                input logic Cu_isRet, // Retention signa;l
+                input logic Cu_isImmediate, // Immediate bit
+                input logic Cu_isWb, /// Memory Write  //Possible in add, sub, mul,div,mod,and, or, not,mov, ld, lsl, lsr, asr, call
+                input logic Cu_isUBranch, // Unconditiona Branch Instrcution : b, call, ret
+                input logic Cu_isCall , // Call Instruction 
+                input logic Cu_isAdd, /// add, ld, st
+                input logic Cu_isSub, // sub
+                input logic Cu_isCmp, // cmp
+                input logic Cu_isMul, // mul
+                input logic Cu_isDiv, // div
+                input logic Cu_isMod, // mod
+                input logic Cu_isLsl, // lsl
+                input logic Cu_isLsr, // Lsr
+                input logic Cu_isAsr, // ASR
+                input logic Cu_isOr, // OR
+                input logic Cu_isAnd, // AND
+                input logic Cu_isNot, // Not
+                input logic Cu_isMov, // Move
+
+            /// Immediate bit output to Control Unit
+                output logic Cu_imm, /// immediate indication bit
+
+            /// Opcode to control unit
+                output logic [4:0] Cu_opcode ) ;
 
 ///Calculaing the Immediate extensioj bits
 logic [31:0] immx;
@@ -38,14 +70,9 @@ always@(posedge clk)
     pc <= pc_nxt ;
 //////
 
-/// Alll the Signals coming from Control Unit(Cu ) is Prefixed with letter "Cu" .
-////
-//------Branch Unit Generator---------------//
-///Deciding the Branch Value of Register////
-
-//--------------------------------------//
-//------ Register read and write-------//
-//-------------------------------------//
+//---------------------------------------------------------//
+//--------------- Register read and write------------------//
+//---------------------------------------------------------//
 // Read Interface Control 
 logic isRet, isSt ;
 logic [3:0] rd_Addr1_int, rd_addr2_int ;
