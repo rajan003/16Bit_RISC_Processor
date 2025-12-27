@@ -1,6 +1,7 @@
 ///designinmg a ALU control unit//
 ///This ctroller sends Sigtnal to ALU unit to do some operation..\
-
+///Package Importt/
+import cpu_pkg::*;
 module Adder #(parameter WIDTH=32 ) (
   input logic [WIDTH-1:0] A,
   input logic [WIDTH-1:0] B,
