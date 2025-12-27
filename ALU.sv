@@ -1,29 +1,49 @@
+///Package Importt/
+import cpu_pkg::*;
+
 /// ALU block///
 
 module ALU(
-  input logic [15:0] a,
-  input logic [15:0] b,
+  input aluctrl aluSignal , //isAdd, isSub, isCmp, isMul, isDiv, isMod, isLsl, isLsr, isAsr, isOr, isAnd, isNot, isMov, //// ALu Signal
+  //where 
+  //typedef struct {
+  //                logic isAdd;
+  //                logic isSub;
+  //                logic isCmp;
+  //                logic isMul;
+  //                logic isDiv;
+  //                logic isMod;
+  //                logic isLsl;
+  //                logic isLsr;
+  //                logic isAsr;
+  //                logic isOr;
+  //                logic isAnd;
+  //                logic isNot;
+  //                logic isMov } aluctrl ;
+  input logic [31:0] A,
+  input logic [31:0] B,
 
-  input logic [2:0] alu_ctrl,
-
-  output logic [15:0] result,
-  output logic zero 
+  output logic [31:0] aluResult,
+  output logic  flg flag
+  //typedef struct {
+                    // logic GT ;
+                    // logic ET ;
+  // } flg;
 );
-
 
   always_comb 
     begin 
-      case(alu_ctrl)
-        3'b000: result= a + b; // ADD
-        3'b001: result = a-b ; // SUB
-        3'b010: result = ~a ; // INMVERT
-        3'b011: result = a << b // LSR
-        3'b100: result = a >> b // LSL
-        3'b101: result = a & b // AND
-        3'b110: result= a | b // OR
-        3'b111: result = a<b ? 16d'1 : 16d'0;
-          default : result = a+ b;
+      case(aluSignal.aluctrl)
+        isAdd:  ADDER(.A(A), .B(B), .ctrl(2'b00), .result(aluResult), .flag(flag))  ;// Instantiating the Adder module which Do ADD, Sb and Comparison 
+        isSub, isCMp:  ADDER(.A(A), .B(B), .ctrl(2'b01), .result(aluResult), .flag(flag))  ;// Instantiating the Adder module which Do ADD, Sb and Comparison 
+        isMul:  Multiplier(.A(A), .B(B), .Result(aluResult), .flag(flag))  ;// Multiplier module  
+        isDiv, isMod:  Dividor(.A(A), .B(B), .Result(aluResult), .flag(flag))  ;// Divider module: Division and Modulas
+        isLsl, isLsr, isAsr:  Shifter(.A(A), .B(B), .Result(aluResult), .flag(flag))  ;// Instantiating the Adder module which Do ADD, Sb and Comparison 
+        isOr, isAnd, isNot:  Logical(.A(A), .B(B), .Result(aluResult), .flag(flag))  ;// Instantiating the Adder module which Do ADD, Sb and Comparison 
+        isMov:  Movement(.A(A), .B(B), .Result(aluResult), .flag(flag))  ;// Instantiating the Adder module which Do ADD, Sb and Comparison 
+          default : begin flag = 2'b00;
+            result = a+ b; end 
       endcase
     end 
-  assign zero = result = 16'd0 ? 1'b1: 1'b0;
+
 endmodule 
