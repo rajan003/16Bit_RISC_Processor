@@ -1,3 +1,6 @@
+//Importing PAckages
+///Package Importt/
+import cpu_pkg::*;
 /// data Path Design for RISC Processor
 
 ///Calculaing the Immediate extensioj bits
@@ -46,9 +49,10 @@ always@(posedge clk)
 // Read Interface Control 
 logic isRet, isSt ;
 logic [3:0] rd_Addr1_int, rd_addr2_int ;
-logic [31:0] op1, op2 ; /// Two Outputs from Register file.
+logic [31:0] op1, op2, op2_int ; /// Two Outputs from Register file.
 assign rd_addr1_int = isret ? ra : inst[19:22] ; ///  register Read Address Port-1
 assign rd_addr2_int = isSt ? inst[19:22] : inst[15:18] ; /// Store instructure= RD , rest are Rs2 
+
 /// Write interface controls and data//
 logic Cu_isWb ; //// Registe write signa; from Control unit 
 logic [3:0] wr_Addr_int;
@@ -75,7 +79,7 @@ reg2r1w #(.WIDTH(32), .DEPTH(16) )(     /// 16 * 32  REGister Space
   .rd_data1(op1),
   ///Read Port-1///
   .rd_addr2(rd_addr2_int),
-  .rd_Data2(op2)
+  .rd_Data2(op2_int)
 );
 //------ Operand Generation for ALU----//
   // Format     Defition
@@ -134,8 +138,36 @@ assign isBranchTaken = isUbranch | (isBgt & flags.GT) | (isBeq & flags.E) ;
 //-----------------------------------------------------------------------------//
 //--------------Type-2 : Execution of non-Branched Instruction--------------------//
 //----------------------------------------------------------------------------//
+aluctrl aluSignal ; /// ALU control signals
+assign op2 = isImmediate ? immx : op2_int; /// Is Instruction is immediate than Immediate Value otherwise it's an register Instrcution(rs2)
 
+ALU alu_unit #(.WIDTH(32))(
+   .aluSignal(aluSignal) , //isAdd, isSub, isCmp, isMul, isDiv, isMod, isLsl, isLsr, isAsr, isOr, isAnd, isNot, isMov, //// ALu Signal
+  //where 
+  //typedef struct {
+  //                logic isAdd;
+  //                logic isSub;
+  //                logic isCmp;
+  //                logic isMul;
+  //                logic isDiv;
+  //                logic isMod;
+  //                logic isLsl;
+  //                logic isLsr;
+  //                logic isAsr;
+  //                logic isOr;
+  //                logic isAnd;
+  //                logic isNot;
+  //                logic isMov } aluctrl ;
+   .A(op1),
+   .B(op2),
 
+  .aluResult(aluResult),
+  .flag(flag)
+  //typedef struct {
+                    // logic GT ;
+                    // logic ET ;
+  // } flg;
+);
 
 
 
