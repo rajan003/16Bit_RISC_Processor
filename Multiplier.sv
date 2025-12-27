@@ -1,3 +1,6 @@
+///Package Importt/
+import cpu_pkg::*;
+
 module multiplier #(parameter WIDTh=32)
   (
     input logic [WIDTH-1:0] A,
