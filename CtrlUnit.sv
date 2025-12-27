@@ -5,8 +5,8 @@ module Control_Unit(
                 input logic imm, /// immediate indication bit
 
             /// Opcode to control unit
-                input logic [4:0] opcode
-                input logic clk,
+            input logic [4:0] opcode,
+                //input logic clk,
 
                 ///control signals from control unit ///
                 output logic isSt, /// Store instruction 
@@ -59,7 +59,7 @@ begin
  isNot='0; 
  isMov='0; 
  case(opcode) 
-5'b0000:  // ADD (register or Immediate)
+5'b00000:  // ADD (register or Immediate)
          begin
           isAdd=1'b1 ; 
           isWb=1'b1 ;
