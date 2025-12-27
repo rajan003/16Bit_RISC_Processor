@@ -1,8 +1,40 @@
 /// data Path Design for RISC Processor
 
+///Calculaing the Immediate extensioj bits
+logic [31:0] immx;
+always_comb begin 
+  case(instr[18:17])
+    2'b00: immx = instr[16] ? ({16'hFFFF , instr[16:1]}) : ({16'h0000 , instr[16:1]}) ; ///Or// {{12{instr[16]}}, instr[16:1]}; // SIgn Extension 
+    2'b01: immx = ({16'h0000 , instr[16:1]}); /// Filler are zero
+    2'b10: immx = ({16'hFFFF, instr[16:1]});  /// Fillers are One
+    default: immx = ({16'h0000 , instr[16:1]});
+  endcase
+end 
 
+//// Calculating the Branch Instruction Offset
+logic [31:0] BranchTarget ,BranchTarget_int ;
 
-///Note
+assign BranchTarget_int = inst[27:1] >> 2 ; // Shifted Offset , This is doen to amke it Word Addressing 
+assign BranchTarget = pc + ({{5{inst[26]}} , inst[26:0]}); /// Branch Target = PC + Sign-Extension of Shifted Offset
+
+/// Logic to control the Rpogram Counter register that hold the Next instruction register///
+logic Cu_pc_en; /// PC enable signal
+logic [31:0] Cu_IsBranch_pc ; /// PC value coming from Branch Instruction decode
+logic [31:0] pc, pc_incr, pc_nxt;  /// Programme counter value
+logic Cu_is_branch;
+
+always_comb 
+  begin 
+    pc_nxt = pc + 32'd4 ; /// Incrementing by 4 bytes for the next instruction.
+    pc = CU_is_branch ? Branch_pc : pc_nxt ;
+  end 
+
+//// Either PC points to same addrwss to move to Next , Depending on Enable.
+always@(posedge clk)
+  if(pc_en)
+    pc <= pc_nxt ;
+//////
+
 /// Alll the Signals coming from Control Unit(Cu ) is Prefixed with letter "Cu" .
 ////
 //------Branch Unit Generator---------------//
@@ -54,23 +86,7 @@ reg2r1w #(.WIDTH(32), .DEPTH(16) )(     /// 16 * 32  REGister Space
 
  /// Operand one comes from 
 
-/// Logic to control the Rpogram Counter register that hold the Next instruction register///
-logic Cu_pc_en; /// PC enable signal
-logic [31:0] Cu_IsBranch_pc ; /// PC value coming from Branch Instruction decode
-logic [31:0] pc, pc_incr, pc_nxt;  /// Programme counter value
-logic Cu_is_branch;
 
-always_comb 
-  begin 
-    pc_nxt = pc + 32'd4 ; /// Incrementing by 4 bytes for the next instruction.
-    pc = is_branch ? Branch_pc : pc_nxt ;
-  end 
-
-//// Either PC points to same addrwss to move to Next , Depending on Enable.
-always@(posedge clk)
-  if(pc_en)
-    pc <= pc_nxt ;
-//////
 
 //-------------------------------------------//
 //-----Memory load and Store control---------//
@@ -99,13 +115,25 @@ sram_2p #(.ADDR_W(4) , .DATA_W(32) , .DEPTH(16))  DataMem_sram(
 //-----------Execute Unit-----------------//
 //----------------------------------------//
 //Execution of instruction are 2 types
-// Execution of Branched Instruction 
+
+//-----------------------------------------------------------------------------//
+//--------------Type-1 : Execution of Branched Instruction--------------------//
+//----------------------------------------------------------------------------//
+
+logic [31:0] branchPC;
+logic Cu_isRet ;
+
+assign branchPC = CU_isRet ? op1 : BranchTarget ; //  Is the Instrcution is retention type You will read the RA register for Last saved Instruction Address to pick up 
+
+//Now on What condition you want PC to move to Branched instruction 
+///type-1 branch inst: Unconditional Brnahc ( b , call, ret )
+/// type-2, Conditional branch : beq, bne >> they depend on Last instrcution (CMP) result i.e flag 
+assign isBranchTaken = isUbranch | (isBgt & flags.GT) | (isBeq & flags.E) ;
 
 
-
-
-
-
+//-----------------------------------------------------------------------------//
+//--------------Type-2 : Execution of non-Branched Instruction--------------------//
+//----------------------------------------------------------------------------//
 
 
 
