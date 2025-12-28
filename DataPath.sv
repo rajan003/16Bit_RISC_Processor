@@ -83,14 +83,17 @@ end
 
 
 //---------------------------------------------------------//
-//--------------- Register read and write------------------//
+//--------------- Decode: Register read and write----------//
 //---------------------------------------------------------//
 // Read Interface Control 
-logic isRet, isSt ;
+  logic [3:0] ra_addr ; /// Return Address Register
+logic Cu_isRet, Cu_isSt ;
 logic [3:0] rd_Addr1_int, rd_addr2_int ;
 logic [31:0] op1, op2, op2_int ; /// Two Outputs from Register file.
-assign rd_addr1_int = isret ? ra : inst[19:22] ; ///  register Read Address Port-1
-assign rd_addr2_int = isSt ? inst[19:22] : inst[15:18] ; /// Store instructure= RD , rest are Rs2 
+  
+assign ra_addr = 4'b1111 ; // the 16th regitser in GPR is reserved for storing PC value
+assign rd_addr1_int = Cu_isret ? ra_addr : inst[19:22] ; ///  register Read Address Port-1
+assign rd_addr2_int = Cu_isSt ? inst[19:22] : inst[15:18] ; /// Store instructure= RD , rest are Rs2 
 
 /// Write interface controls and data//
 logic Cu_isWb ; //// Registe write signa; from Control unit 
@@ -135,24 +138,23 @@ reg2r1w #(.WIDTH(32), .DEPTH(16) )(     /// 16 * 32  REGister Space
 //-----Memory load and Store control---------//
 //-------------------------------------------//
 // In RISC-V , the only memory access possible is Load and Store.
-// Control signal load -- isLd >>> rd_en==1 ,
-// Control Signal Store -- isSt
-logic [31:0] mdr, mar;
-assign mar = alu_result; /// Address comnes from alu (rs1+imm) for both load and store
-assign mdr = op2 ; /// This is the destination register which you want to store 
+  logic [31:0] mdr, mar, IdResult;
+  assign mar = alu_result[7:0]; /// Address comnes from alu (op1+imm) for both load and store // 8 bits are selected 
+  assign mdr = op2 ; /// This is the destination register which you want to store 
 
-sram_2p #(.ADDR_W(4) , .DATA_W(32) , .DEPTH(16))  DataMem_sram(
-  // Write port  
-  .wclk(clk),
-  .wen(isSt), /// Store Enable
-  waddr(mar),
-  wdata(op2),
-  // Read port
-  rclk(clk),
-  ren(isLd), /// Load Enable 
-  raddr(mar),
-  rdata(mem_Read)
-  );
+  ///Creating a 1kB size SRAM 
+  sram_2p #(.ADDR_W(8) , .DATA_W(32) , .DEPTH(256))  DataMem_sram(
+    // Write port  // Storing data to Memory
+    .wclk(clk),
+    .wen(Cu_isSt), /// Store Enable
+    waddr(mar),
+    wdata(mdr),
+    // Read port /// Loading Data to GPR
+    rclk(clk),
+    ren(Cu_isLd), /// Load Enable 
+    raddr(mar),
+    rdata(IdResult) /// 32 bit data from 
+    );
 
 ///---------------------------------------//
 //-----------Execute Unit-----------------//
@@ -215,7 +217,7 @@ ALU alu_unit #(.WIDTH(32))(
 
 
 
-
+endmodule 
 
 
 
