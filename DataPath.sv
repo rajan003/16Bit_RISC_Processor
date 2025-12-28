@@ -33,8 +33,42 @@ module DataPath (
                 output logic Cu_imm, /// immediate indication bit
 
             /// Opcode to control unit
-                output logic [4:0] Cu_opcode ) ;
+                output logic [4:0] Cu_opcode 
+          ///Instruction SRAM wr Interface/// For loading SRAM 
+               input logic inst_sram_wr ,
+               input logic [INST_ADDR_WIDTH -1:0] inst_sram_addr,
+               input logic [INST_DATA_WIDTH-1:0] inst_sram_data
+) ;
 
+  //--------------------------------------------------------------//
+  //-------------Instruction fetch Unit--------------------------//
+  //-------------------------------------------------------------//
+
+  /// Logic to control the Rpogram Counter register that hold the Next instruction register///
+  logic [31:0] pc , pc_nxt;  /// Programme counter value
+  
+   assign  pc_nxt = isBranchTaken ? BranchPC : pc + 32'd4 ; // /// Incrementing by 4 bytes for the next instruction
+  
+  //// Either PC points to same addrwss to move to Next , Depending on Enable.
+  always@(posedge clk)
+      pc <= pc_nxt ;
+
+    //---------Instruction SRAM Controls-------------//
+   logic wr_en ;
+   logic [INST_ADDR_WIDTH-1:0] inst_addr;
+     assign  wr_en= sram_wr ? 1'b1 : 1'b0 ; //For testing, loading SRAm with instructions and rest of time it a read.
+        /// Here we will use the PC_nxt that is pointing the Next PC counter i.e when PC is actually loaded you have the instruction available
+     assign inst_addr = wr_en ? inst_sram_addr : pc_nxt[INST_ADDR_WIDTH+1 : 2];  // 	•	PC[1:0] → byte offset (always 00) •	PC[2] → selects instruction 1
+  /// Instrcution memory SRAM 
+    sram_1p #(.ADDR_WIDTH(INST_ADDR_WIDTH), .DATA_WIDTH(INST_DATA_WIDTH) ) sram_instr (
+      .clk(clk),
+      .mem_en(1'b1),
+      .we(wr_en),
+      .addr(inst_addr),
+      .wdata(inst_sram_data),
+      .rdata(inst) /// Current Instruction 
+    );
+    
 ///Calculaing the Immediate extensioj bits
 logic [31:0] immx;
 always_comb begin 
@@ -46,29 +80,7 @@ always_comb begin
   endcase
 end 
 
-//// Calculating the Branch Instruction Offset
-logic [31:0] BranchTarget ,BranchTarget_int ;
 
-assign BranchTarget_int = inst[27:1] >> 2 ; // Shifted Offset , This is doen to amke it Word Addressing 
-assign BranchTarget = pc + ({{5{inst[26]}} , inst[26:0]}); /// Branch Target = PC + Sign-Extension of Shifted Offset
-
-/// Logic to control the Rpogram Counter register that hold the Next instruction register///
-logic Cu_pc_en; /// PC enable signal
-logic [31:0] Cu_IsBranch_pc ; /// PC value coming from Branch Instruction decode
-logic [31:0] pc, pc_incr, pc_nxt;  /// Programme counter value
-logic Cu_is_branch;
-
-always_comb 
-  begin 
-    pc_nxt = pc + 32'd4 ; /// Incrementing by 4 bytes for the next instruction.
-    pc = CU_is_branch ? Branch_pc : pc_nxt ;
-  end 
-
-//// Either PC points to same addrwss to move to Next , Depending on Enable.
-always@(posedge clk)
-  if(pc_en)
-    pc <= pc_nxt ;
-//////
 
 //---------------------------------------------------------//
 //--------------- Register read and write------------------//
@@ -151,22 +163,27 @@ sram_2p #(.ADDR_W(4) , .DATA_W(32) , .DEPTH(16))  DataMem_sram(
 //--------------Type-1 : Execution of Branched Instruction--------------------//
 //----------------------------------------------------------------------------//
 
-logic [31:0] branchPC;
-logic Cu_isRet ;
-
-assign branchPC = CU_isRet ? op1 : BranchTarget ; //  Is the Instrcution is retention type You will read the RA register for Last saved Instruction Address to pick up 
-
+logic [31:0] BranchPC;
+logic [31:0] BranchTarget ,BranchTarget_int ;
+  
 //Now on What condition you want PC to move to Branched instruction 
-///type-1 branch inst: Unconditional Brnahc ( b , call, ret )
+/// type-1 branch inst: Unconditional Brnahc ( b , call, ret )
 /// type-2, Conditional branch : beq, bne >> they depend on Last instrcution (CMP) result i.e flag 
-assign isBranchTaken = isUbranch | (isBgt & flags.GT) | (isBeq & flags.E) ;
-
-
+    always_comb begin 
+      isBranchTaken = Cu_isUbranch | (Cu_isBgt & flags.GT) | (CU_isBeq & flags.E) ;  /// (Type-1 OR Type-2) 
+  
+        //// Calculating the Branch Instruction Offset(nneded in both Conditional and Uncondiional branch instr except ret )
+       BranchTarget_int = inst[27:1] >> 2 ; // Shifted Offset , This is doen to amke it Word Addressing 
+       BranchTarget = pc + ({{5{inst[26]}} , inst[26:0]}); /// Branch Target = PC + Sign-Extension of Shifted Offset
+  
+       BranchPC = CU_isRet ? op1 : BranchTarget ; //  Is the Instrcution is retention type You will read the RA register for Last saved Instruction Address to pick up 
+    end 
+  
 //-----------------------------------------------------------------------------//
 //--------------Type-2 : Execution of non-Branched Instruction--------------------//
 //----------------------------------------------------------------------------//
 aluctrl aluSignal ; /// ALU control signals
-assign op2 = isImmediate ? immx : op2_int; /// Is Instruction is immediate than Immediate Value otherwise it's an register Instrcution(rs2)
+assign op2 = Cu_isImmediate ? immx : op2_int; /// Is Instruction is immediate than Immediate Value otherwise it's an register Instrcution(rs2)
 
 ALU alu_unit #(.WIDTH(32))(
    .aluSignal(aluSignal) , //isAdd, isSub, isCmp, isMul, isDiv, isMod, isLsl, isLsr, isAsr, isOr, isAnd, isNot, isMov, //// ALu Signal
