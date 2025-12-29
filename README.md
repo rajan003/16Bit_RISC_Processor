@@ -1,4 +1,6 @@
-# 16Bit_RISC_Processor
+# 32Bit_RISC_Processor
+>>> Register, Instruction & Memories everything is 32 bit.
+
 Designing a Simpl RISC Processor .
 No-Pipeline 
 
