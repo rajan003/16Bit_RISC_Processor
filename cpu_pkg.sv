@@ -19,5 +19,6 @@ typedef struct {
                      logic GT ;
                      logic ET ;
    } flg;
-
+parameter INST_ADDR_WIDTH =32;
+parameter INST_DATA_WIDTH= 12;
 endpackage
