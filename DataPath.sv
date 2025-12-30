@@ -1,7 +1,6 @@
-//Importing PAckages
-///Package Importt/
-import cpu_pkg::*;
 /// data Path Design for RISC Processor
+///Package Importt/
+`include "cpu_pkg.sv"
 module DataPath (
                 input logic clk,
 
@@ -33,17 +32,34 @@ module DataPath (
                 output logic Cu_imm, /// immediate indication bit
 
             /// Opcode to control unit
-                output logic [4:0] Cu_opcode 
+ 				 output logic [4:0] Cu_opcode ,
           ///Instruction SRAM wr Interface/// For loading SRAM 
-               input logic inst_sram_wr ,
-               input logic [INST_ADDR_WIDTH -1:0] inst_sram_addr,
-               input logic [INST_DATA_WIDTH-1:0] inst_sram_data
-) ;
+               output logic imem_en ,
+ 			   output logic [INST_ADDR_WIDTH -1:0] imem_addr,
+  			   input logic [INST_DATA_WIDTH-1:0] imem_data
+  
+  			/// Register write for testbench Monitoring
+			   output  logic [3:0]  rf_wr_addr,
+ 			   output  logic [31:0] rf_wr_data,
+			   output  logic        rf_wr_en,
+  
+  			/// Data memory read write interface///
+  				output logic [11:0] dmem_waddr,   // 4K words -> 12-bit word address
+				output logic [31:0] dmem_wdata,
+			    output logic        dmem_wen,
 
+				  // Read port
+  				output logic [11:0] dmem_raddr,
+				input logic  [31:0] dmem_rdata,	
+			    output logic         dmem_ren
+
+) ;
+  
   //--------------------------------------------------------------//
   //-------------Instruction fetch Unit--------------------------//
   //-------------------------------------------------------------//
-
+  logic [31:0] instr;
+  logic isBranchTaken;
   /// Logic to control the Rpogram Counter register that hold the Next instruction register///
   logic [31:0] pc , pc_nxt;  /// Programme counter value
   
@@ -54,21 +70,14 @@ module DataPath (
       pc <= pc_nxt ;
 
     //---------Instruction SRAM Controls-------------//
-   logic wr_en ;
-   logic [INST_ADDR_WIDTH-1:0] inst_addr;
-     assign  wr_en= sram_wr ? 1'b1 : 1'b0 ; //For testing, loading SRAm with instructions and rest of time it a read.
-        /// Here we will use the PC_nxt that is pointing the Next PC counter i.e when PC is actually loaded you have the instruction available
-     assign inst_addr = wr_en ? inst_sram_addr : pc_nxt[INST_ADDR_WIDTH+1 : 2];  // 	•	PC[1:0] → byte offset (always 00) •	PC[2] → selects instruction 1
-  /// Instrcution memory SRAM 
-    sram_1p #(.ADDR_WIDTH(INST_ADDR_WIDTH), .DATA_WIDTH(INST_DATA_WIDTH) ) sram_instr (
-      .clk(clk),
-      .mem_en(1'b1),
-      .we(wr_en),
-      .addr(inst_addr),
-      .wdata(inst_sram_data),
-      .rdata(inst) /// Current Instruction 
-    );
-    
+    assign  imem_en= 1'b1 ; //For testing, loading SRAm with instructions and rest of time it a read.
+          /// Here we will use the PC_nxt that is pointing the Next PC counter i.e when PC is actually loaded you have the instruction available
+    assign imem_addr =  pc_nxt[INST_ADDR_WIDTH+1 : 2];  // 	•	PC[1:0] → byte offset (always 00) •	PC[2] → selects instruction 1
+    assign instr = imem_data ; 
+  
+  
+  
+  
 ///Calculaing the Immediate extensioj bits
 logic [31:0] immx;
 always_comb begin 
@@ -87,23 +96,22 @@ end
 //---------------------------------------------------------//
 // Read Interface Control 
   logic [3:0] ra_addr ; /// Return Address Register
-logic Cu_isRet, Cu_isSt ;
+  logic [31:0] alu_result;
 logic [3:0] rd_Addr1_int, rd_addr2_int ;
 logic [31:0] op1, op2, op2_int ; /// Two Outputs from Register file.
   
 assign ra_addr = 4'b1111 ; // the 16th regitser in GPR is reserved for storing PC value
-assign rd_addr1_int = Cu_isret ? ra_addr : inst[19:22] ; ///  register Read Address Port-1
-assign rd_addr2_int = Cu_isSt ? inst[19:22] : inst[15:18] ; /// Store instructure= RD , rest are Rs2 
+  assign rd_addr1_int = Cu_isRet ? ra_addr : inst[22:19] ; ///  register Read Address Port-1
+  assign rd_addr2_int = Cu_isSt ? inst[22:19] : inst[18:15] ; /// Store instructure= RD , rest are Rs2 
 
 /// Write interface controls and data//
-logic Cu_isWb ; //// Registe write signa; from Control unit 
 logic [3:0] wr_Addr_int;
-logic [15:0] wr_data_int;
+  logic [31:0] wr_data_int;
 always_comb begin 
-  wr_Addr_int = Cu_isCall ? ra[3:0] : inst[23:26] ; ///  Ra register addresss or Rd Register from Instruction 
+  wr_Addr_int = Cu_isCall ? ra_addr : inst[26:23] ; ///  Ra register addresss or Rd Register from Instruction 
   case({isCall, isLd}) 
     2'b00: wr_data_int = alu_result;  /// ALU result is saved here 
-    2'b01: wr_data_int = Idresult ; /// Memory read reesult //Load instruction 
+    2'b01: wr_data_int = IdResult ; /// Memory read reesult //Load instruction 
     2'b10: wr_data_int = pc + 4 ; ///Next address for PC i.e PC+ 4 Bytes 
       default: wr_data_int = alu_result;
   endcase
@@ -123,6 +131,14 @@ reg2r1w #(.WIDTH(32), .DEPTH(16) )(     /// 16 * 32  REGister Space
   .rd_addr2(rd_addr2_int),
   .rd_Data2(op2_int)
 );
+  
+ /// Register write Observation port to testebench//
+  always_comb begin 
+	 rf_wr_addr = wr_Addr_int;
+	 rf_wr_data = wr_data_int;
+	 rf_wr_en = Cu_isWb;
+  end 
+  
 //------ Operand Generation for ALU----//
   // Format     Defition
   // branch     register op (28-32) offset (1-27) op )  
@@ -139,23 +155,35 @@ reg2r1w #(.WIDTH(32), .DEPTH(16) )(     /// 16 * 32  REGister Space
 //-------------------------------------------//
 // In RISC-V , the only memory access possible is Load and Store.
   logic [31:0] mdr, mar, IdResult;
-  assign mar = alu_result[7:0]; /// Address comnes from alu (op1+imm) for both load and store // 8 bits are selected 
-  assign mdr = op2 ; /// This is the destination register which you want to store 
+  always_comb begin 
+      mar = alu_result[7:0]; /// Address comnes from alu (op1+imm) for both load and store // 8 bits are selected 
+      mdr = op2 ; /// This is the destination register which you want to store 
 
+      dmem_waddr = mar;   // 4K words -> 12-bit word address
+      dmem_wdata = mdr;
+	  dmem_wen = Cu_isSt;
+
+				  // Read port
+  	  dmem_raddr= mar;
+	  IdResult=dmem_rdata;	
+	  dmem_ren=Cu_isLd;
+  end 
   ///Creating a 1kB size SRAM 
-  sram_2p #(.ADDR_W(8) , .DATA_W(32) , .DEPTH(256))  DataMem_sram(
+ // sram_2p #(.ADDR_W(8) , .DATA_W(32) , .DEPTH(256))  DataMem_sram(
     // Write port  // Storing data to Memory
-    .wclk(clk),
-    .wen(Cu_isSt), /// Store Enable
-    waddr(mar),
-    wdata(mdr),
+//    .wclk(clk),
+//    .wen(Cu_isSt), /// Store Enable
+//    waddr(mar),
+//    wdata(mdr),
     // Read port /// Loading Data to GPR
-    rclk(clk),
-    ren(Cu_isLd), /// Load Enable 
-    raddr(mar),
-    rdata(IdResult) /// 32 bit data from 
-    );
+//    rclk(clk),
+//    ren(Cu_isLd), /// Load Enable 
+//    raddr(mar),
+//    rdata(IdResult) /// 32 bit data from 
+//    );
 
+  
+  
 ///---------------------------------------//
 //-----------Execute Unit-----------------//
 //----------------------------------------//
@@ -167,12 +195,12 @@ reg2r1w #(.WIDTH(32), .DEPTH(16) )(     /// 16 * 32  REGister Space
 
 logic [31:0] BranchPC;
 logic [31:0] BranchTarget ,BranchTarget_int ;
-  
+flag_t flags;
 //Now on What condition you want PC to move to Branched instruction 
 /// type-1 branch inst: Unconditional Brnahc ( b , call, ret )
 /// type-2, Conditional branch : beq, bne >> they depend on Last instrcution (CMP) result i.e flag 
     always_comb begin 
-      isBranchTaken = Cu_isUbranch | (Cu_isBgt & flags.GT) | (CU_isBeq & flags.E) ;  /// (Type-1 OR Type-2) 
+      isBranchTaken = Cu_isUBranch | (Cu_isBgt & flags.GT) | (Cu_isBeq & flags.ET) ;  /// (Type-1 OR Type-2) 
   
         //// Calculating the Branch Instruction Offset(nneded in both Conditional and Uncondiional branch instr except ret )
        BranchTarget_int = inst[27:1] >> 2 ; // Shifted Offset , This is doen to amke it Word Addressing 
@@ -184,7 +212,7 @@ logic [31:0] BranchTarget ,BranchTarget_int ;
 //-----------------------------------------------------------------------------//
 //--------------Type-2 : Execution of non-Branched Instruction--------------------//
 //----------------------------------------------------------------------------//
-aluctrl aluSignal ; /// ALU control signals
+aluctrl_t aluSignal ; /// ALU control signals
 assign op2 = Cu_isImmediate ? immx : op2_int; /// Is Instruction is immediate than Immediate Value otherwise it's an register Instrcution(rs2)
 
 ALU alu_unit #(.WIDTH(32))(
@@ -207,8 +235,8 @@ ALU alu_unit #(.WIDTH(32))(
    .A(op1),
    .B(op2),
 
-  .aluResult(aluResult),
-  .flag(flag)
+  .aluResult(alu_result),
+  .flag(flags)
   //typedef struct {
                     // logic GT ;
                     // logic ET ;
@@ -218,13 +246,3 @@ ALU alu_unit #(.WIDTH(32))(
 
 
 endmodule 
-
-
-
-
-
-
-
-
-
-
