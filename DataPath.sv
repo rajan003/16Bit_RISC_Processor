@@ -3,6 +3,7 @@
 `include "cpu_pkg.sv"
 module DataPath (
                 input logic clk,
+  				input logic rst,
 
                 ///control signals from control unit ///
                 input logic Cu_isSt, /// Store instruction 
@@ -36,7 +37,7 @@ module DataPath (
           ///Instruction SRAM wr Interface/// For loading SRAM 
                output logic imem_en ,
  			   output logic [INST_ADDR_WIDTH -1:0] imem_addr,
-  			   input logic [INST_DATA_WIDTH-1:0] imem_data
+ 			   input logic [INST_DATA_WIDTH-1:0] imem_data,
   
   			/// Register write for testbench Monitoring
 			   output  logic [3:0]  rf_wr_addr,
@@ -44,13 +45,13 @@ module DataPath (
 			   output  logic        rf_wr_en,
   
   			/// Data memory read write interface///
-  				output logic [11:0] dmem_waddr,   // 4K words -> 12-bit word address
-				output logic [31:0] dmem_wdata,
+               output logic [MEM_ADDR_WIDTH-1:0] dmem_waddr,   // 4K words -> 12-bit word address
+               output logic [MEM_DATA_WIDTH-1:0] dmem_wdata,
 			    output logic        dmem_wen,
 
 				  // Read port
-  				output logic [11:0] dmem_raddr,
-				input logic  [31:0] dmem_rdata,	
+               output logic [MEM_ADDR_WIDTH-1:0] dmem_raddr,
+ 			   input logic  [MEM_DATA_WIDTH-1:0] dmem_rdata,	
 			    output logic         dmem_ren
 
 ) ;
@@ -66,30 +67,35 @@ module DataPath (
    assign  pc_nxt = isBranchTaken ? BranchPC : pc + 32'd4 ; // /// Incrementing by 4 bytes for the next instruction
   
   //// Either PC points to same addrwss to move to Next , Depending on Enable.
-  always@(posedge clk)
-      pc <= pc_nxt ;
+  always@(negedge clk, negedge rst)
+    if(!rst) pc <= '0;
+    else pc <= pc_nxt ;
 
     //---------Instruction SRAM Controls-------------//
-    assign  imem_en= 1'b1 ; //For testing, loading SRAm with instructions and rest of time it a read.
-          /// Here we will use the PC_nxt that is pointing the Next PC counter i.e when PC is actually loaded you have the instruction available
-    assign imem_addr =  pc_nxt[INST_ADDR_WIDTH+1 : 2];  // 	•	PC[1:0] → byte offset (always 00) •	PC[2] → selects instruction 1
+    assign  imem_en= rst ; // always available /// if their is address change
+    assign imem_addr =  pc[INST_ADDR_WIDTH+1 : 2];  // 	•	PC[1:0] → byte offset (always 00) •	PC[2] → selects instruction 1
     assign instr = imem_data ; 
   
   
-  
+  assign opcode = instr[31:27] ;
   
 ///Calculaing the Immediate extensioj bits
 logic [31:0] immx;
-always_comb begin 
-  case(instr[18:17])
-    2'b00: immx = instr[16] ? ({16'hFFFF , instr[16:1]}) : ({16'h0000 , instr[16:1]}) ; ///Or// {{12{instr[16]}}, instr[16:1]}; // SIgn Extension 
-    2'b01: immx = ({16'h0000 , instr[16:1]}); /// Filler are zero
-    2'b10: immx = ({16'hFFFF, instr[16:1]});  /// Fillers are One
-    default: immx = ({16'h0000 , instr[16:1]});
+always @* begin
+	case (instr[17:16])
+		2'b00: immx = {{16{instr[15]}}, instr[15:0]};   // proper sign-extend
+		2'b01: immx = {16'h0000, instr[15:0]};
+		2'b10: immx = {16'hFFFF, instr[15:0]};
+		default: immx = {16'h0000, instr[15:0]};
   endcase
-end 
-
-
+end
+  
+//  always @(posedge clk) begin
+//  if (rst) begin
+//    $display("[%0t] PC=%08h IMEM_ADDR=%0d INSTR=%08h OPCODE=%05b",
+//             $time, pc, imem_addr, instr, instr[31:27]);
+//  end
+//end
 
 //---------------------------------------------------------//
 //--------------- Decode: Register read and write----------//
@@ -97,19 +103,19 @@ end
 // Read Interface Control 
   logic [3:0] ra_addr ; /// Return Address Register
   logic [31:0] alu_result;
-logic [3:0] rd_Addr1_int, rd_addr2_int ;
+  logic [3:0] rd_addr1_int, rd_addr2_int ;
 logic [31:0] op1, op2, op2_int ; /// Two Outputs from Register file.
   
 assign ra_addr = 4'b1111 ; // the 16th regitser in GPR is reserved for storing PC value
-  assign rd_addr1_int = Cu_isRet ? ra_addr : inst[22:19] ; ///  register Read Address Port-1
-  assign rd_addr2_int = Cu_isSt ? inst[22:19] : inst[18:15] ; /// Store instructure= RD , rest are Rs2 
+	assign rd_addr1_int = Cu_isRet ? ra_addr : instr[21:18] ; ///  register Read Address Port-1
+	assign rd_addr2_int = Cu_isSt ? instr[21:18] : instr[17:14] ; /// Store instructure= RD , rest are Rs2 
 
 /// Write interface controls and data//
-logic [3:0] wr_Addr_int;
+  logic [3:0] wr_addr_int;
   logic [31:0] wr_data_int;
-always_comb begin 
-  wr_Addr_int = Cu_isCall ? ra_addr : inst[26:23] ; ///  Ra register addresss or Rd Register from Instruction 
-  case({isCall, isLd}) 
+always@* begin 
+	wr_addr_int = Cu_isCall ? ra_addr : instr[25:22] ; ///  Ra register addresss or Rd Register from Instruction 
+  case({Cu_isCall, Cu_isLd}) 
     2'b00: wr_data_int = alu_result;  /// ALU result is saved here 
     2'b01: wr_data_int = IdResult ; /// Memory read reesult //Load instruction 
     2'b10: wr_data_int = pc + 4 ; ///Next address for PC i.e PC+ 4 Bytes 
@@ -117,24 +123,24 @@ always_comb begin
   endcase
 end 
 
-reg2r1w #(.WIDTH(32), .DEPTH(16) )(     /// 16 * 32  REGister Space
+  reg2r1w #(.WIDTH(32), .DEPTH(16) ) rf_inst (     /// 16 * 32  REGister Space
   .clk(clk), 
   ///Write Ports///
   .wr_en(Cu_isWb),
-  .wr_addr(wr_Addr_int),
+  .wr_addr(wr_addr_int),
   .wr_data(wr_data_int),
 
   //// Read Ports-0//////
-  .rd_addr1(rd_Addr1_int),
+  .rd_addr1(rd_addr1_int),
   .rd_data1(op1),
   ///Read Port-1///
   .rd_addr2(rd_addr2_int),
-  .rd_Data2(op2_int)
+  .rd_data2(op2_int)
 );
   
  /// Register write Observation port to testebench//
   always_comb begin 
-	 rf_wr_addr = wr_Addr_int;
+	 rf_wr_addr = wr_addr_int;
 	 rf_wr_data = wr_data_int;
 	 rf_wr_en = Cu_isWb;
   end 
@@ -155,16 +161,16 @@ reg2r1w #(.WIDTH(32), .DEPTH(16) )(     /// 16 * 32  REGister Space
 //-------------------------------------------//
 // In RISC-V , the only memory access possible is Load and Store.
   logic [31:0] mdr, mar, IdResult;
-  always_comb begin 
+  always @* begin 
       mar = alu_result[7:0]; /// Address comnes from alu (op1+imm) for both load and store // 8 bits are selected 
       mdr = op2 ; /// This is the destination register which you want to store 
 
-      dmem_waddr = mar;   // 4K words -> 12-bit word address
+      dmem_waddr = mar[MEM_ADDR_WIDTH-1:0];   // 4K words -> 12-bit word address
       dmem_wdata = mdr;
 	  dmem_wen = Cu_isSt;
 
 				  // Read port
-  	  dmem_raddr= mar;
+      dmem_raddr= mar[MEM_ADDR_WIDTH-1:0];
 	  IdResult=dmem_rdata;	
 	  dmem_ren=Cu_isLd;
   end 
@@ -199,23 +205,32 @@ flag_t flags;
 //Now on What condition you want PC to move to Branched instruction 
 /// type-1 branch inst: Unconditional Brnahc ( b , call, ret )
 /// type-2, Conditional branch : beq, bne >> they depend on Last instrcution (CMP) result i.e flag 
-    always_comb begin 
-      isBranchTaken = Cu_isUBranch | (Cu_isBgt & flags.GT) | (Cu_isBeq & flags.ET) ;  /// (Type-1 OR Type-2) 
+    always@* begin 
+        isBranchTaken = Cu_isUBranch | (Cu_isBgt & flags.GT) | (Cu_isBeq & flags.ET) ;  /// (Type-1 OR Type-2) 
   
         //// Calculating the Branch Instruction Offset(nneded in both Conditional and Uncondiional branch instr except ret )
-       BranchTarget_int = inst[27:1] >> 2 ; // Shifted Offset , This is doen to amke it Word Addressing 
-       BranchTarget = pc + ({{5{inst[26]}} , inst[26:0]}); /// Branch Target = PC + Sign-Extension of Shifted Offset
+		BranchTarget_int = instr[26:0] >> 2 ; // Shifted Offset , This is done to make it Word Addressing 
+        BranchTarget = pc + ({{5{BranchTarget_int[26]}} , BranchTarget_int[26:0]}); /// Branch Target = PC + Sign-Extension of Shifted Offset
   
-       BranchPC = CU_isRet ? op1 : BranchTarget ; //  Is the Instrcution is retention type You will read the RA register for Last saved Instruction Address to pick up 
+       BranchPC = Cu_isRet ? op1 : BranchTarget ; //  Is the Instrcution is retention type You will read the RA register for Last saved Instruction Address to pick up 
     end 
   
+  always @(posedge clk) begin
+  $display("BRCHK: U=%b BGT=%b BEQ=%b | GT=%b ET=%b -> isBranchTaken=%b",
+           Cu_isUBranch,
+           Cu_isBgt,
+           Cu_isBeq,
+           flags.GT,
+           flags.ET,
+           isBranchTaken);
+end
 //-----------------------------------------------------------------------------//
 //--------------Type-2 : Execution of non-Branched Instruction--------------------//
 //----------------------------------------------------------------------------//
 aluctrl_t aluSignal ; /// ALU control signals
 assign op2 = Cu_isImmediate ? immx : op2_int; /// Is Instruction is immediate than Immediate Value otherwise it's an register Instrcution(rs2)
 
-ALU alu_unit #(.WIDTH(32))(
+  ALU  alu_unit (
    .aluSignal(aluSignal) , //isAdd, isSub, isCmp, isMul, isDiv, isMod, isLsl, isLsr, isAsr, isOr, isAnd, isNot, isMov, //// ALu Signal
   //where 
   //typedef struct {
