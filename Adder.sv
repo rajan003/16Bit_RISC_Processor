@@ -1,7 +1,7 @@
 ///designinmg a ALU control unit//
 ///This ctroller sends Sigtnal to ALU unit to do some operation..\
 ///Package Importt/
-import cpu_pkg::*;
+`include "cpu_pkg.sv"
 module Adder #(parameter WIDTH=32 ) (
   input logic [WIDTH-1:0] A,
   input logic [WIDTH-1:0] B,
@@ -14,8 +14,9 @@ module Adder #(parameter WIDTH=32 ) (
 
   logic [WIDTH-1:0] B_not ;
   logic [WIDTH :0] SUM ; /// ! extra bit for Carry bit 
-  always_comb begin 
-      B_not = (ctrl==2'b00) ? B : (B ^ {WIDTH{1'b1}} ) ; /// For Addition B_not = B , for Subtractio/Comparison B_not = B ^ WIDTH{1'b1} i.e Invert of B
+  
+  always@(*) begin 
+      B_not  = (ctrl==2'b00) ? B : ~B;/// For Addition B_not = B , for Subtractio/Comparison B_not = B ^ WIDTH{1'b1} i.e Invert of B
       SUM = {1'b0, A} + {1'b0, B_not} + (ctrl==2'b00 ? 1'b0 : 1'b1) ; /// SUM = A+ B , SUb= A + 2's(B) = A + ~B + 1 
       result = SUM[WIDTH-1:0] ; /// Result is still N bit width 
       ////Equal to zero///
