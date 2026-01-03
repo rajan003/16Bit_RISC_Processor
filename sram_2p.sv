@@ -1,20 +1,3 @@
-///Simple Dual Port SRAM model ////
-//Simple Dual-Port (SDP) SRAM
-
-//One port = write-only
-//Other port = read-only
-
-//People casually say “dual-port”, but in specs this is Simple Dual Port, not True Dual Port.
-//SDP vs TDP (Quick sanity table)
-//   Type                                      Port A                                   Port B
-//   Simple Dual Port (SDP)                    Write only                               Read only
-//   True Dual Port (TDP)                      Read / Write                             Read / Write
-//SDP SRAMs 😄
-//✔ Easier timing closure
-//✔ No write-write hazards
-//✔ Cleaner arbitration
-//✔ Perfect for FIFOs, queues, TLBs, buffers
-
 module sram_2p #(
   parameter ADDR_W = 6,
   parameter DATA_W = 32,
