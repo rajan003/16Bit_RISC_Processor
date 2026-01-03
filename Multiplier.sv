@@ -1,7 +1,7 @@
 ///Package Importt/
-import cpu_pkg::*;
+`include "cpu_pkg.sv"
 
-module multiplier #(parameter WIDTh=32)
+module Multiplier #(parameter WIDTH=32)
   (
     input logic [WIDTH-1:0] A,
     input logic [WIDTH-1:0] B,
