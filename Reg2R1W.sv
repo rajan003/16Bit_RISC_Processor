@@ -1,9 +1,10 @@
 //// Creating a N register field with 2 read and 1 Write port////
 /// The N/DEPTH register field with M/WIDTH bit Width 
 /// Adress Add_width = $clog2(N) ;
-module  reg2r1w #(parameter WIDTH=8 , parameter DEPTH=16 )(
+module  reg2r1w #(parameter WIDTH=32 , parameter DEPTH=128 )(
 
   input logic clk, 
+  input logic rst,
 
           ///Write Ports///
   input logic wr_en,
@@ -17,19 +18,23 @@ module  reg2r1w #(parameter WIDTH=8 , parameter DEPTH=16 )(
 
   ///Read Port-1///
   input logic [$clog2(DEPTH)-1:0]rd_addr2,
-  output logic [WIDTH-1:0] rd_Data2
+  output logic [WIDTH-1:0] rd_data2
 );
 
   ////---------Register BAsed---------------///
   //// DEPTH=16 & WIDTH=8)
 
-  logic [WIDTH-1:0] mem [DEPTH-1:0] //// DEPTH * WIDTH storage
+  logic [WIDTH-1:0] mem [DEPTH-1:0]; //// DEPTH * WIDTH storage
 
-  always@(posedge clk)
-    if(wr_en) mem[wr_addr] <= wr_data ;
+  always@(posedge clk, negedge rst)
+    if(!rst) begin 
+      for(int i=0; i< DEPTH ; i++)
+        mem[i] <= '0;
+    end 
+    else if(wr_en) mem[wr_addr] <= wr_data ;
 
 
-  assign rd_data1 = mem[rd_Addr1] ; // Port-1 Read
-  assign rd_data2 = mem[rd_Addr2] ; /// Port-2 read
+  assign rd_data1 = mem[rd_addr1] ; // Port-1 Read
+  assign rd_data2 = mem[rd_addr2] ; /// Port-2 read
 
 endmodule 
