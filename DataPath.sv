@@ -4,6 +4,8 @@
 module DataPath (
                 input logic clk,
   				input logic rst,
+  
+  				input logic start,
 
                 ///control signals from control unit ///
                 input logic Cu_isSt, /// Store instruction 
@@ -69,15 +71,16 @@ module DataPath (
   //// Either PC points to same addrwss to move to Next , Depending on Enable.
   always@(negedge clk, negedge rst)
     if(!rst) pc <= '0;
-    else pc <= pc_nxt ;
+  else if(start)  pc <= pc_nxt ;
+    else pc <= pc ;
 
     //---------Instruction SRAM Controls-------------//
-    assign  imem_en= rst ; // always available /// if their is address change
+    assign imem_en= start ; // always available /// if their is address change
     assign imem_addr =  pc[INST_ADDR_WIDTH+1 : 2];  // 	•	PC[1:0] → byte offset (always 00) •	PC[2] → selects instruction 1
     assign instr = imem_data ; 
   
   
-  assign opcode = instr[31:27] ;
+  assign Cu_opcode = instr[31:27] ;
   
 ///Calculaing the Immediate extensioj bits
 logic [31:0] immx;
@@ -89,7 +92,8 @@ always @* begin
 		default: immx = {16'h0000, instr[15:0]};
   endcase
 end
-  
+/// Immediate bit to control unit
+  assign Cu_imm = instr[26] ;
 //  always @(posedge clk) begin
 //  if (rst) begin
 //    $display("[%0t] PC=%08h IMEM_ADDR=%0d INSTR=%08h OPCODE=%05b",
@@ -107,8 +111,8 @@ end
 logic [31:0] op1, op2, op2_int ; /// Two Outputs from Register file.
   
 assign ra_addr = 4'b1111 ; // the 16th regitser in GPR is reserved for storing PC value
-	assign rd_addr1_int = Cu_isRet ? ra_addr : instr[21:18] ; ///  register Read Address Port-1
-	assign rd_addr2_int = Cu_isSt ? instr[21:18] : instr[17:14] ; /// Store instructure= RD , rest are Rs2 
+  assign rd_addr1_int = Cu_isRet ? ra_addr : instr[21:18] ; ///  register Read Address Port-1// RA or RS1 always
+  assign rd_addr2_int = Cu_isSt ? instr[25:22] : instr[17:14] ; /// Store instructure= RD , rest are Rs2 
 
 /// Write interface controls and data//
   logic [3:0] wr_addr_int;
@@ -125,6 +129,7 @@ end
 
   reg2r1w #(.WIDTH(32), .DEPTH(16) ) rf_inst (     /// 16 * 32  REGister Space
   .clk(clk), 
+    .rst(rst),
   ///Write Ports///
   .wr_en(Cu_isWb),
   .wr_addr(wr_addr_int),
@@ -142,7 +147,7 @@ end
   always_comb begin 
 	 rf_wr_addr = wr_addr_int;
 	 rf_wr_data = wr_data_int;
-	 rf_wr_en = Cu_isWb;
+	 rf_wr_en =  Cu_isWb; /// blocking with start 
   end 
   
 //------ Operand Generation for ALU----//
@@ -163,7 +168,7 @@ end
   logic [31:0] mdr, mar, IdResult;
   always @* begin 
       mar = alu_result[7:0]; /// Address comnes from alu (op1+imm) for both load and store // 8 bits are selected 
-      mdr = op2 ; /// This is the destination register which you want to store 
+      mdr = op2_int ; /// This is the destination register content which you want to store 
 
       dmem_waddr = mar[MEM_ADDR_WIDTH-1:0];   // 4K words -> 12-bit word address
       dmem_wdata = mdr;
@@ -201,12 +206,18 @@ end
 
 logic [31:0] BranchPC;
 logic [31:0] BranchTarget ,BranchTarget_int ;
-flag_t flags;
+flag_t flags, flags_last;
+  //Holding last Instruction Flags
+  always@(posedge clk, negedge rst)
+    if(!rst)
+      flags_last <= '0;
+    else flags_last <= flags;
+  
 //Now on What condition you want PC to move to Branched instruction 
 /// type-1 branch inst: Unconditional Brnahc ( b , call, ret )
 /// type-2, Conditional branch : beq, bne >> they depend on Last instrcution (CMP) result i.e flag 
     always@* begin 
-        isBranchTaken = Cu_isUBranch | (Cu_isBgt & flags.GT) | (Cu_isBeq & flags.ET) ;  /// (Type-1 OR Type-2) 
+      isBranchTaken = Cu_isUBranch | (Cu_isBgt & flags_last.GT) | (Cu_isBeq & flags_last.ET) ;  /// (Type-1 OR Type-2) 
   
         //// Calculating the Branch Instruction Offset(nneded in both Conditional and Uncondiional branch instr except ret )
 		BranchTarget_int = instr[26:0] >> 2 ; // Shifted Offset , This is done to make it Word Addressing 
@@ -215,21 +226,37 @@ flag_t flags;
        BranchPC = Cu_isRet ? op1 : BranchTarget ; //  Is the Instrcution is retention type You will read the RA register for Last saved Instruction Address to pick up 
     end 
   
-  always @(posedge clk) begin
-  $display("BRCHK: U=%b BGT=%b BEQ=%b | GT=%b ET=%b -> isBranchTaken=%b",
-           Cu_isUBranch,
-           Cu_isBgt,
-           Cu_isBeq,
-           flags.GT,
-           flags.ET,
-           isBranchTaken);
-end
+//  always @(posedge clk) begin
+//  $display("BRCHK: U=%b BGT=%b BEQ=%b | GT=%b ET=%b -> isBranchTaken=%b",
+//           Cu_isUBranch,
+//           Cu_isBgt,
+//           Cu_isBeq,
+//           flags.GT,
+//           flags.ET,
+//           isBranchTaken);
+//end
 //-----------------------------------------------------------------------------//
 //--------------Type-2 : Execution of non-Branched Instruction--------------------//
 //----------------------------------------------------------------------------//
 aluctrl_t aluSignal ; /// ALU control signals
 assign op2 = Cu_isImmediate ? immx : op2_int; /// Is Instruction is immediate than Immediate Value otherwise it's an register Instrcution(rs2)
-
+always_comb begin
+  aluSignal = '0;
+  aluSignal.isAdd = Cu_isAdd;
+  aluSignal.isSub = Cu_isSub;
+  aluSignal.isCmp = Cu_isCmp;
+  aluSignal.isMul = Cu_isMul;
+  aluSignal.isDiv = Cu_isDiv;
+  aluSignal.isMod = Cu_isMod;
+  aluSignal.isLsl = Cu_isLsl;
+  aluSignal.isLsr = Cu_isLsr;
+  aluSignal.isAsr = Cu_isAsr;
+  aluSignal.isOr  = Cu_isOr;
+  aluSignal.isAnd = Cu_isAnd;
+  aluSignal.isNot = Cu_isNot;
+  aluSignal.isMov = Cu_isMov;
+end
+  
   ALU  alu_unit (
    .aluSignal(aluSignal) , //isAdd, isSub, isCmp, isMul, isDiv, isMod, isLsl, isLsr, isAsr, isOr, isAnd, isNot, isMov, //// ALu Signal
   //where 
