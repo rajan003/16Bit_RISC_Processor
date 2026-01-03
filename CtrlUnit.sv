@@ -1,5 +1,7 @@
 // Verilog code for RISC Processor 
 // Verilog code for Control Unit 
+///Package Importt/
+`include "cpu_pkg.sv"
 module Control_Unit(
             /// Immediate bit output to Control Unit
                 input logic imm, /// immediate indication bit
@@ -106,6 +108,7 @@ begin
  5'b01001:  // Move
    begin
           isMov=1'b1 ; 
+          isWb=1'b1 ;
    end
  5'b01010:  // LSL
    begin
