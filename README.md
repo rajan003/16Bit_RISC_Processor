@@ -18,3 +18,7 @@ not                     01000         not rd, (rs2/imm)
 move                    01000         not rd, (rs2/imm)
 lsl                     01010         lsl rd, rs1, (rs2/imm)
 lsr                     01011         lsr rd, rs1, (rs2/imm)
+
+
+**For a Pipelined Version (5-Stage Pipeline)**
+https://github.com/rajan003/32bit_Pipelined_InOrder_RISC_Processor
