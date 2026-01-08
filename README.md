@@ -1,6 +1,6 @@
 # 32Bit_RISC_Processor
 >>> Register, Instruction & Memories everything is 32 bit.
-
+**Simulation Result: https://www.edaplayground.com/x/6sBM**
 Designing a Simpl 32 bit RISC Processor .
 No-Pipeline 
 
